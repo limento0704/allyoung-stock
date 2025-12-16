@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>薇佳庫存管理_V4</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f0f9ff; padding-bottom: 80px; } /* 背景改為極淡藍 */
+        /* 修改 Tab 顏色為藍色 (#3b82f6 是 Tailwind 的 blue-500) */
+        .tab-active { color: #3b82f6; border-top: 2px solid #3b82f6; } 
+        .tab-inactive { color: #94a3b8; }
+        .table-auto th { background-color: #e0f2fe; color: #0c4a6e; font-weight: 600; font-size: 0.85rem; } /* 表頭改為淡藍 */
+        .table-auto td { font-size: 0.9rem; border-bottom: 1px solid #e5e7eb; }
+        
+        .modal-enter-active, .modal-leave-active { transition: opacity 0.3s ease; }
+        .modal-enter-from, .modal-leave-to { opacity: 0; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="max-w-xl mx-auto min-h-screen bg-white shadow-xl relative">
+
+    <header class="bg-blue-500 text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
+        <h1 class="font-bold text-lg"><i class="fa-solid fa-clipboard-list mr-2"></i>薇佳庫存管理</h1>
+        <div class="space-x-2">
+            <button @click="showSettings = true" class="text-sm bg-blue-400 hover:bg-blue-300 px-3 py-1 rounded shadow text-white border border-blue-300">
+                <i class="fa-solid fa-bell"></i> 設定
+            </button>
+            <button @click="resetData" class="text-xs bg-blue-700 hover:bg-blue-800 px-2 py-1 rounded">重置</button>
+        </div>
+    </header>
+
+    <transition name="modal">
+        <div v-if="showSettings" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-50 flex items-center justify-center px-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+                <div class="bg-blue-500 text-white p-3 flex justify-between items-center">
+                    <h3 class="font-bold"><i class="fa-solid fa-bell mr-2"></i>預警設定</h3>
+                    <button @click="showSettings = false" class="text-white hover:text-gray-200">
+                        <i class="fa-solid fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <label class="block text-sm font-bold text-gray-700 mb-3 text-center">
+                        剩餘幾天算「即將到期」？
+                    </label>
+                    <div class="flex justify-center items-center space-x-3 mb-4">
+                        <button @click="settings.warningDays > 10 ? settings.warningDays-=10 : null" class="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 font-bold text-gray-600">-</button>
+                        <input type="number" v-model.number="settings.warningDays" @change="saveData" class="w-24 p-2 border-2 border-blue-100 rounded text-center font-bold text-blue-600 text-xl focus:outline-none focus:border-blue-500">
+                        <button @click="settings.warningDays+=10" class="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 font-bold text-gray-600">+</button>
+                    </div>
+                    <p class="text-xs text-gray-500 text-center mb-6">
+                        當效期小於 <strong>{{ settings.warningDays }}</strong> 天時，<br>列表將標示為黃色並優先排序。
+                    </p>
+                    <button @click="saveData(); showSettings = false" class="w-full bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600">
+                        確定儲存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <div v-if="currentTab === 'stock'" class="p-4">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-400 pl-3">目前庫存清單</h2>
+        
+        <div class="mb-4 relative">
+            <input type="text" v-model="searchQuery" placeholder="搜尋產品..." class="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white shadow-sm">
+            <i class="fa-solid fa-search absolute left-3 top-2.5 text-gray-400"></i>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm bg-white">
+            <table class="w-full text-left table-auto">
+                <thead>
+                    <tr>
+                        <th class="p-3">產品名稱</th>
+                        <th class="p-3 w-16 text-center">數量</th>
+                        <th class="p-3 w-28">效期 / 剩餘</th>
+                        <th class="p-3 w-10">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(item, index) in filteredInventory" :key="item.id" :class="getRowClass(item.expiry)">
+                        <td class="p-3 align-middle">
+                            <div class="font-bold text-gray-700">{{ item.name }}</div>
+                            <div class="text-xs text-gray-500">{{ item.spec }}</div>
+                            <span class="text-xs px-2 py-1 rounded mt-1 inline-block font-bold" :class="getStatusBadge(item.expiry).class">
+                                {{ getStatusBadge(item.expiry).text }}
+                            </span>
+                        </td>
+                        <td class="p-3 text-center font-mono font-bold text-lg text-slate-700">{{ item.qty }}</td>
+                        <td class="p-3 text-sm font-mono">
+                            <div class="text-gray-800">{{ item.expiry }}</div>
+                            <div class="text-xs mt-1 font-bold" :class="getStatusTextColor(item.expiry)">
+                                <i class="fa-regular fa-clock mr-1"></i>剩 {{ getDaysDiff(item.expiry) }} 天
+                            </div>
+                        </td>
+                        <td class="p-3 text-center">
+                            <button @click="deleteInventoryItem(item.id)" class="text-gray-300 hover:text-red-500 transition">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr v-if="filteredInventory.length === 0">
+                        <td colspan="4" class="p-8 text-center text-gray-400">
+                            <i class="fa-solid fa-box-open text-4xl mb-3 text-blue-200"></i><br>
+                            目前沒有庫存資料
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div v-if="currentTab === 'add'" class="p-4">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-400 pl-3">新增庫存</h2>
+        
+        <div class="bg-white p-5 rounded-xl border shadow-sm space-y-4">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">選擇產品項目</label>
+                <select v-model="inputForm.productIndex" class="w-full p-3 border rounded-lg bg-slate-50 focus:border-blue-500 outline-none">
+                    <option value="" disabled>-- 請選擇 --</option>
+                    <option v-for="(prod, idx) in masterList" :value="idx" :key="prod.name">
+                        {{ prod.name }} ({{ prod.spec }})
+                    </option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">入庫數量</label>
+                <div class="flex items-center">
+                    <button @click="inputForm.qty > 1 ? inputForm.qty-- : inputForm.qty=1" class="px-4 py-3 bg-gray-100 rounded-l-lg hover:bg-gray-200 text-gray-600">-</button>
+                    <input type="number" v-model.number="inputForm.qty" class="w-full p-3 text-center border-y bg-slate-50 outline-none font-bold text-blue-900">
+                    <button @click="inputForm.qty++" class="px-4 py-3 bg-gray-100 rounded-r-lg hover:bg-gray-200 text-gray-600">+</button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">有效期限</label>
+                <input type="date" v-model="inputForm.expiry" class="w-full p-3 border rounded-lg bg-slate-50 focus:border-blue-500 outline-none">
+            </div>
+
+            <button @click="addToInventory" class="w-full bg-blue-500 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-600 shadow-md transition transform active:scale-95">
+                <i class="fa-solid fa-plus-circle mr-2"></i>加入庫存表
+            </button>
+        </div>
+    </div>
+
+    <div v-if="currentTab === 'manage'" class="p-4">
+        
+        <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-400 pl-3">品項管理</h2>
+        <div class="text-xs text-blue-600 mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+            <i class="fa-solid fa-circle-info mr-1"></i>提示：若要調整「到期預警天數」，請點擊右上角的設定按鈕。
+        </div>
+        
+        <div class="bg-slate-100 p-4 rounded-lg mb-6">
+            <h3 class="font-bold text-gray-700 mb-2">建立新產品項目</h3>
+            <div class="space-y-2">
+                <input type="text" v-model="newMaster.name" placeholder="產品名稱 (例如: 洗面乳)" class="w-full p-2 border rounded focus:border-blue-400 outline-none">
+                <input type="text" v-model="newMaster.spec" placeholder="規格 (例如: 100g)" class="w-full p-2 border rounded focus:border-blue-400 outline-none">
+                <button @click="addMasterItem" class="w-full bg-slate-700 text-white py-2 rounded hover:bg-slate-800">新增項目</button>
+            </div>
+        </div>
+
+        <h3 class="font-bold text-gray-700 mb-2">現有可選項目 ({{ masterList.length }})</h3>
+        <ul class="space-y-2">
+            <li v-for="(item, index) in masterList" :key="index" class="flex justify-between items-center bg-white p-3 border rounded shadow-sm hover:shadow-md transition">
+                <div>
+                    <div class="font-bold text-gray-800">{{ item.name }}</div>
+                    <div class="text-xs text-gray-500">{{ item.spec }}</div>
+                </div>
+                <button @click="deleteMasterItem(index)" class="text-gray-300 hover:text-red-600 px-2">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 pb-4 z-50 max-w-xl mx-auto shadow-[0_-5px_10px_rgba(0,0,0,0.05)]">
+        <button @click="currentTab = 'stock'" class="flex flex-col items-center w-1/3 transition" :class="currentTab === 'stock' ? 'tab-active' : 'tab-inactive'">
+            <i class="fa-solid fa-table-list text-xl mb-1 mt-2"></i>
+            <span class="text-xs">目前庫存</span>
+        </button>
+        <button @click="currentTab = 'add'" class="flex flex-col items-center w-1/3 transition" :class="currentTab === 'add' ? 'tab-active' : 'tab-inactive'">
+            <i class="fa-solid fa-box-open text-xl mb-1 mt-2"></i>
+            <span class="text-xs">新增庫存</span>
+        </button>
+        <button @click="currentTab = 'manage'" class="flex flex-col items-center w-1/3 transition" :class="currentTab === 'manage' ? 'tab-active' : 'tab-inactive'">
+            <i class="fa-solid fa-gear text-xl mb-1 mt-2"></i>
+            <span class="text-xs">品項管理</span>
+        </button>
+    </nav>
+
+</div>
+
+<script>
+    const { createApp } = Vue;
+
+    createApp({
+        data() {
+            return {
+                currentTab: 'stock',
+                searchQuery: '',
+                showSettings: false,
+                settings: {
+                    warningDays: 180 
+                },
+                inputForm: {
+                    productIndex: '',
+                    qty: 1,
+                    expiry: ''
+                },
+                newMaster: { name: '', spec: '' },
+                inventory: [],
+                masterList: [
+                    { name: '微晶3D全能洗顏霜', spec: '100g' },
+                    { name: '蜜花酸晶拋光洗顏霜', spec: '100g' },
+                    { name: '速效抗痘調理潔面乳', spec: '100g' },
+                    { name: '全能修復霜 (小紅瓶)', spec: '50g' },
+                    { name: '微晶3D全能精華', spec: '50g' },
+                    { name: '蜜花酸晶煥膚美白精萃 (小蜜瓶)', spec: '30ml' },
+                    { name: '極光淡斑乙基維他命C精華', spec: '30ml' },
+                    { name: '速效抗痘調理精華', spec: '50g' },
+                    { name: '微晶3D全能化妝水', spec: '200ml' },
+                    { name: '微晶3D全能眼霜', spec: '15g' },
+                    { name: '小紅急救修復精華液', spec: '30ml' },
+                    { name: '多效物理清爽防曬乳SPF30', spec: '30g' }
+                ]
+            }
+        },
+        computed: {
+            filteredInventory() {
+                let sortedList = [...this.inventory].sort((a, b) => {
+                    return new Date(a.expiry) - new Date(b.expiry);
+                });
+
+                if (!this.searchQuery) return sortedList;
+                return sortedList.filter(item => 
+                    item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+                );
+            }
+        },
+        mounted() {
+            const savedInventory = localStorage.getItem('sv_inventory_v3');
+            const savedMaster = localStorage.getItem('sv_master_v3');
+            const savedSettings = localStorage.getItem('sv_settings_v3');
+            
+            if (savedInventory) this.inventory = JSON.parse(savedInventory);
+            if (savedMaster) this.masterList = JSON.parse(savedMaster);
+            if (savedSettings) this.settings = JSON.parse(savedSettings);
+        },
+        methods: {
+            saveData() {
+                localStorage.setItem('sv_inventory_v3', JSON.stringify(this.inventory));
+                localStorage.setItem('sv_master_v3', JSON.stringify(this.masterList));
+                localStorage.setItem('sv_settings_v3', JSON.stringify(this.settings));
+            },
+            addToInventory() {
+                if (this.inputForm.productIndex === '' || !this.inputForm.expiry) {
+                    alert('請選擇產品並填寫效期');
+                    return;
+                }
+                const selectedProduct = this.masterList[this.inputForm.productIndex];
+                const newItem = {
+                    id: Date.now(),
+                    name: selectedProduct.name,
+                    spec: selectedProduct.spec,
+                    qty: this.inputForm.qty,
+                    expiry: this.inputForm.expiry
+                };
+                this.inventory.unshift(newItem);
+                this.saveData();
+                alert('已加入庫存！');
+                this.inputForm.qty = 1;
+                this.currentTab = 'stock';
+            },
+            deleteInventoryItem(id) {
+                if(confirm('確定要刪除這筆庫存資料嗎？')) {
+                    this.inventory = this.inventory.filter(item => item.id !== id);
+                    this.saveData();
+                }
+            },
+            addMasterItem() {
+                if (!this.newMaster.name) return alert('請輸入名稱');
+                this.masterList.push({ ...this.newMaster });
+                this.newMaster.name = '';
+                this.newMaster.spec = '';
+                this.saveData();
+                alert('品項已新增');
+            },
+            deleteMasterItem(index) {
+                if(confirm('確定要移除此產品嗎？')) {
+                    this.masterList.splice(index, 1);
+                    this.saveData();
+                }
+            },
+            getDaysDiff(expiry) {
+                const today = new Date();
+                today.setHours(0,0,0,0); 
+                const exp = new Date(expiry);
+                return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+            },
+            getStatusBadge(expiry) {
+                const days = this.getDaysDiff(expiry);
+                const warningThreshold = this.settings.warningDays; 
+
+                if (days < 0) return { text: '已過期', class: 'bg-red-100 text-red-700' };
+                if (days < warningThreshold) return { text: '即將到期', class: 'bg-yellow-100 text-yellow-800' };
+                // 這裡的正常狀態也微調成稍微柔和的綠色
+                return { text: '正常', class: 'bg-teal-100 text-teal-700' };
+            },
+            getStatusTextColor(expiry) {
+                const days = this.getDaysDiff(expiry);
+                const warningThreshold = this.settings.warningDays;
+                
+                if (days < 0) return 'text-red-600 font-bold';
+                if (days < warningThreshold) return 'text-yellow-600 font-bold';
+                return 'text-teal-600'; // 正常狀態改為 Teal (藍綠色) 配合整體色調
+            },
+            getRowClass(expiry) {
+                const days = this.getDaysDiff(expiry);
+                if (days < 0) return 'bg-red-50';
+                return 'bg-white';
+            },
+            resetData() {
+                if(confirm('確定要重置所有資料嗎？（這會清除庫存與自訂清單，回復到系統預設值）')) {
+                    this.inventory = [];
+                    localStorage.removeItem('sv_inventory_v3');
+                    localStorage.removeItem('sv_master_v3');
+                    localStorage.removeItem('sv_settings_v3');
+                    location.reload(); 
+                }
+            }
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>

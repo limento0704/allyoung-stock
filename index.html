@@ -70,13 +70,12 @@
             <i class="fa-solid fa-search absolute left-3 top-2.5 text-gray-400"></i>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm bg-white">
+<div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm bg-white">
             <table class="w-full text-left table-auto">
                 <thead>
                     <tr>
-                        <th class="p-3">產品名稱</th>
-                        <th class="p-3 w-16 text-center">數量</th>
-                        <th class="p-3 w-28">效期 / 剩餘</th>
+                        <th class="p-3 whitespace-nowrap">產品名稱</th> <th class="p-3 text-center whitespace-nowrap">數量</th>
+                        <th class="p-3 whitespace-nowrap">效期 / 剩餘</th>
                         <th class="p-3 w-10">操作</th>
                     </tr>
                 </thead>
@@ -90,12 +89,14 @@
                             </span>
                         </td>
                         <td class="p-3 text-center font-mono font-bold text-lg text-slate-700">{{ item.qty }}</td>
-                        <td class="p-3 text-sm font-mono">
+                        
+                        <td class="p-3 text-sm font-mono whitespace-nowrap">
                             <div class="text-gray-800">{{ item.expiry }}</div>
                             <div class="text-xs mt-1 font-bold" :class="getStatusTextColor(item.expiry)">
                                 <i class="fa-regular fa-clock mr-1"></i>剩 {{ getDaysDiff(item.expiry) }} 天
                             </div>
                         </td>
+                        
                         <td class="p-3 text-center">
                             <button @click="deleteInventoryItem(item.id)" class="text-gray-300 hover:text-red-500 transition">
                                 <i class="fa-solid fa-trash-can"></i>
@@ -338,3 +339,4 @@
 </body>
 
 </html>
+

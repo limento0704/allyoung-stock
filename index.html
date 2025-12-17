@@ -8,15 +8,15 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f0f9ff; padding-bottom: 80px; } /* 背景改為極淡藍 */
-        /* 修改 Tab 顏色為藍色 (#3b82f6 是 Tailwind 的 blue-500) */
+        body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f0f9ff; padding-bottom: 80px; }
         .tab-active { color: #3b82f6; border-top: 2px solid #3b82f6; } 
         .tab-inactive { color: #94a3b8; }
-        .table-auto th { background-color: #e0f2fe; color: #0c4a6e; font-weight: 600; font-size: 0.85rem; } /* 表頭改為淡藍 */
+        .table-auto th { background-color: #e0f2fe; color: #0c4a6e; font-weight: 600; font-size: 0.85rem; }
         .table-auto td { font-size: 0.9rem; border-bottom: 1px solid #e5e7eb; }
-        
         .modal-enter-active, .modal-leave-active { transition: opacity 0.3s ease; }
         .modal-enter-from, .modal-leave-to { opacity: 0; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -52,7 +52,7 @@
                         <button @click="settings.warningDays+=10" class="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 font-bold text-gray-600">+</button>
                     </div>
                     <p class="text-xs text-gray-500 text-center mb-6">
-                        當效期小於 <strong>{{ settings.warningDays }}</strong> 天時，<br>列表將標示為黃色並優先排序。
+                        當效期小於 <strong>{{ settings.warningDays }}</strong> 天時，<br>列表將標示為黃色。
                     </p>
                     <button @click="saveData(); showSettings = false" class="w-full bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600">
                         確定儲存
@@ -65,33 +65,74 @@
     <div v-if="currentTab === 'stock'" class="p-4">
         <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-400 pl-3">目前庫存清單</h2>
         
-        <div class="mb-4 relative">
+        <div class="mb-3 relative">
             <input type="text" v-model="searchQuery" placeholder="搜尋產品..." class="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white shadow-sm">
             <i class="fa-solid fa-search absolute left-3 top-2.5 text-gray-400"></i>
         </div>
 
-<div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm bg-white">
+        <div class="flex space-x-2 overflow-x-auto hide-scrollbar mb-4 pb-1">
+            <button @click="filterType = 'all'" 
+                class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition border"
+                :class="filterType === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                全部
+            </button>
+            <button @click="filterType = 'opened'" 
+                class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition border"
+                :class="filterType === 'opened' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                已開封
+            </button>
+            <button @click="filterType = 'unopened'" 
+                class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition border"
+                :class="filterType === 'unopened' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                未開封
+            </button>
+            <button @click="filterType = 'warning'" 
+                class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition border"
+                :class="filterType === 'warning' ? 'bg-yellow-400 text-yellow-900 border-yellow-400' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                即將到期
+            </button>
+            <button @click="filterType = 'expired'" 
+                class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition border"
+                :class="filterType === 'expired' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                已過期
+            </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm bg-white">
             <table class="w-full text-left table-auto">
                 <thead>
                     <tr>
-                        <th class="p-3 whitespace-nowrap">產品名稱</th> <th class="p-3 text-center whitespace-nowrap">數量</th>
+                        <th class="p-3 whitespace-nowrap">產品資訊與狀態</th>
+                        <th class="p-3 text-center whitespace-nowrap">數量</th>
                         <th class="p-3 whitespace-nowrap">效期 / 剩餘</th>
                         <th class="p-3 w-10">操作</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="(item, index) in filteredInventory" :key="item.id" :class="getRowClass(item.expiry)">
+                        
                         <td class="p-3 align-middle">
-                            <div class="font-bold text-gray-700">{{ item.name }}</div>
-                            <div class="text-xs text-gray-500">{{ item.spec }}</div>
-                            <span class="text-xs px-2 py-1 rounded mt-1 inline-block font-bold" :class="getStatusBadge(item.expiry).class">
-                                {{ getStatusBadge(item.expiry).text }}
-                            </span>
+                            <div class="font-bold text-gray-800 text-base">{{ item.name }}</div>
+                            <div class="text-xs text-gray-500 mb-1.5">{{ item.spec }}</div>
+                            
+                            <div class="flex flex-wrap items-center gap-1">
+                                <span v-if="item.status === '已開封'" class="text-[10px] bg-slate-600 text-white px-1.5 py-0.5 rounded border border-slate-700 shadow-sm">
+                                    <i class="fa-solid fa-box-open mr-0.5"></i>已開封
+                                </span>
+                                <span v-else class="text-[10px] bg-sky-500 text-white px-1.5 py-0.5 rounded border border-sky-600 shadow-sm">
+                                    <i class="fa-solid fa-cube mr-0.5"></i>未開封
+                                </span>
+
+                                <span class="text-[10px] px-1.5 py-0.5 rounded border shadow-sm font-bold" :class="getStatusBadge(item.expiry).class">
+                                    {{ getStatusBadge(item.expiry).text }}
+                                </span>
+                            </div>
                         </td>
+
                         <td class="p-3 text-center font-mono font-bold text-lg text-slate-700">{{ item.qty }}</td>
                         
-                        <td class="p-3 text-sm font-mono whitespace-nowrap">
-                            <div class="text-gray-800">{{ item.expiry }}</div>
+                        <td class="p-3 text-sm font-mono whitespace-nowrap align-middle">
+                            <div class="text-gray-800 font-bold text-base">{{ item.expiry }}</div>
                             <div class="text-xs mt-1 font-bold" :class="getStatusTextColor(item.expiry)">
                                 <i class="fa-regular fa-clock mr-1"></i>剩 {{ getDaysDiff(item.expiry) }} 天
                             </div>
@@ -105,8 +146,8 @@
                     </tr>
                     <tr v-if="filteredInventory.length === 0">
                         <td colspan="4" class="p-8 text-center text-gray-400">
-                            <i class="fa-solid fa-box-open text-4xl mb-3 text-blue-200"></i><br>
-                            目前沒有庫存資料
+                            <i class="fa-solid fa-filter text-4xl mb-3 text-blue-200"></i><br>
+                            沒有符合條件的資料
                         </td>
                     </tr>
                 </tbody>
@@ -126,6 +167,22 @@
                         {{ prod.name }} ({{ prod.spec }})
                     </option>
                 </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-2">庫存狀態</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="cursor-pointer border rounded-lg p-3 flex items-center justify-center space-x-2 hover:bg-blue-50 transition" :class="inputForm.status === '未開封' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white'">
+                        <input type="radio" v-model="inputForm.status" value="未開封" class="hidden">
+                        <i class="fa-solid fa-cube text-blue-500"></i>
+                        <span class="font-bold text-gray-700">未開封</span>
+                    </label>
+                    <label class="cursor-pointer border rounded-lg p-3 flex items-center justify-center space-x-2 hover:bg-gray-50 transition" :class="inputForm.status === '已開封' ? 'bg-gray-100 border-gray-600 ring-1 ring-gray-600' : 'bg-white'">
+                        <input type="radio" v-model="inputForm.status" value="已開封" class="hidden">
+                        <i class="fa-solid fa-box-open text-gray-600"></i>
+                        <span class="font-bold text-gray-700">已開封</span>
+                    </label>
+                </div>
             </div>
 
             <div>
@@ -149,7 +206,6 @@
     </div>
 
     <div v-if="currentTab === 'manage'" class="p-4">
-        
         <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-400 pl-3">品項管理</h2>
         <div class="text-xs text-blue-600 mb-4 bg-blue-50 p-3 rounded border border-blue-100">
             <i class="fa-solid fa-circle-info mr-1"></i>提示：若要調整「到期預警天數」，請點擊右上角的設定按鈕。
@@ -203,6 +259,7 @@
             return {
                 currentTab: 'stock',
                 searchQuery: '',
+                filterType: 'all', 
                 showSettings: false,
                 settings: {
                     warningDays: 180 
@@ -210,7 +267,8 @@
                 inputForm: {
                     productIndex: '',
                     qty: 1,
-                    expiry: ''
+                    expiry: '',
+                    status: '未開封' 
                 },
                 newMaster: { name: '', spec: '' },
                 inventory: [],
@@ -232,14 +290,30 @@
         },
         computed: {
             filteredInventory() {
-                let sortedList = [...this.inventory].sort((a, b) => {
-                    return new Date(a.expiry) - new Date(b.expiry);
-                });
+                let result = [...this.inventory];
 
-                if (!this.searchQuery) return sortedList;
-                return sortedList.filter(item => 
-                    item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-                );
+                if (this.searchQuery) {
+                    result = result.filter(item => 
+                        item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+                    );
+                }
+
+                if (this.filterType === 'opened') {
+                    result = result.filter(item => item.status === '已開封');
+                } else if (this.filterType === 'unopened') {
+                    result = result.filter(item => item.status === '未開封');
+                } else if (this.filterType === 'warning') {
+                    result = result.filter(item => {
+                        const days = this.getDaysDiff(item.expiry);
+                        return days >= 0 && days < this.settings.warningDays;
+                    });
+                } else if (this.filterType === 'expired') {
+                    result = result.filter(item => this.getDaysDiff(item.expiry) < 0);
+                }
+
+                result.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+
+                return result;
             }
         },
         mounted() {
@@ -247,7 +321,16 @@
             const savedMaster = localStorage.getItem('sv_master_v3');
             const savedSettings = localStorage.getItem('sv_settings_v3');
             
-            if (savedInventory) this.inventory = JSON.parse(savedInventory);
+            if (savedInventory) {
+                let data = JSON.parse(savedInventory);
+                this.inventory = data.map(item => {
+                    let newStatus = item.status;
+                    if (!newStatus || newStatus === 'NEW') newStatus = '未開封';
+                    if (newStatus === '已使用') newStatus = '已開封';
+                    
+                    return { ...item, status: newStatus };
+                });
+            }
             if (savedMaster) this.masterList = JSON.parse(savedMaster);
             if (savedSettings) this.settings = JSON.parse(savedSettings);
         },
@@ -268,13 +351,17 @@
                     name: selectedProduct.name,
                     spec: selectedProduct.spec,
                     qty: this.inputForm.qty,
-                    expiry: this.inputForm.expiry
+                    expiry: this.inputForm.expiry,
+                    status: this.inputForm.status 
                 };
                 this.inventory.unshift(newItem);
                 this.saveData();
                 alert('已加入庫存！');
+                
                 this.inputForm.qty = 1;
+                this.inputForm.status = '未開封'; 
                 this.currentTab = 'stock';
+                this.filterType = 'all'; 
             },
             deleteInventoryItem(id) {
                 if(confirm('確定要刪除這筆庫存資料嗎？')) {
@@ -306,10 +393,9 @@
                 const days = this.getDaysDiff(expiry);
                 const warningThreshold = this.settings.warningDays; 
 
-                if (days < 0) return { text: '已過期', class: 'bg-red-100 text-red-700' };
-                if (days < warningThreshold) return { text: '即將到期', class: 'bg-yellow-100 text-yellow-800' };
-                // 這裡的正常狀態也微調成稍微柔和的綠色
-                return { text: '正常', class: 'bg-teal-100 text-teal-700' };
+                if (days < 0) return { text: '已過期', class: 'bg-red-100 text-red-700 border-red-200 bg-white' };
+                if (days < warningThreshold) return { text: '即將到期', class: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+                return { text: '正常', class: 'bg-teal-100 text-teal-700 border-teal-200' };
             },
             getStatusTextColor(expiry) {
                 const days = this.getDaysDiff(expiry);
@@ -317,7 +403,7 @@
                 
                 if (days < 0) return 'text-red-600 font-bold';
                 if (days < warningThreshold) return 'text-yellow-600 font-bold';
-                return 'text-teal-600'; // 正常狀態改為 Teal (藍綠色) 配合整體色調
+                return 'text-teal-600'; 
             },
             getRowClass(expiry) {
                 const days = this.getDaysDiff(expiry);
@@ -337,6 +423,4 @@
     }).mount('#app');
 </script>
 </body>
-
 </html>
-
